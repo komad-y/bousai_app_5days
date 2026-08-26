@@ -18,6 +18,20 @@
     <label for="name">避難所名（必須）</label><br>
     <input type="text" id="name" name="name">
   </p>
+  <p>
+    <label for="congestion">混雑状況（必須）</label><br>
+    <select id="congestion" name="congestion" required>
+      <option value="" selected disabled>選択してください</option>
+      <option value="空いています">空いています</option>
+      <option value="やや混雑">やや混雑</option>
+      <option value="混雑">混雑</option>
+      <option value="満員">満員</option>
+    </select>
+  </p>
+  <p>
+    <label for="remaining_capacity">残り許容人数（必須）</label><br>
+    <input type="number" id="remaining_capacity" name="remaining_capacity" min="0" step="1" required>
+  </p>
   <p><button type="submit">登録</button></p>
 </form>
 {% endblock %}

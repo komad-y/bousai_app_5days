@@ -23,6 +23,14 @@
 
     * { box-sizing: border-box; }
     body { margin: 0; background: var(--canvas); }
+    body.display-pc main { width: min(100% - 56px, 1200px); }
+    body.display-mobile main { width: min(100% - 28px, 560px); margin-top: 20px; }
+    body.display-mobile .header-inner { width: min(100% - 28px, 560px); }
+    body.display-mobile input,
+    body.display-mobile select,
+    body.display-mobile textarea,
+    body.display-mobile button { max-width: 100%; }
+    body.display-mobile table { display: block; max-width: 100%; overflow-x: auto; }
     .site-header {
       height: 70px;
       background: linear-gradient(110deg, var(--blue-dark), #2863bb);
@@ -48,6 +56,35 @@
       line-height: 1;
       cursor: pointer;
     }
+    .display-mode-bar {
+      display: flex;
+      justify-content: flex-end;
+      width: min(100% - 40px, 980px);
+      margin: 12px auto 0;
+    }
+    .display-mode-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 3px 12px rgba(22, 54, 96, .08);
+    }
+    .display-mode-label { color: var(--muted); font-size: .78rem; font-weight: 700; padding: 0 4px; }
+    .display-mode-button {
+      border: 0;
+      border-radius: 5px;
+      padding: 6px 9px;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: .78rem;
+      cursor: pointer;
+    }
+    .display-mode-button:hover { background: #eef4fb; color: var(--blue); }
+    .display-mode-button.is-selected { background: var(--blue); color: white; }
     .site-nav {
       display: none;
       position: absolute;
@@ -70,6 +107,10 @@
       .brand { font-size: 1.25rem; }
       main { margin-top: 20px; }
       .site-nav { top: 62px; right: 14px; }
+      .display-mode-bar { width: min(100% - 28px, 560px); justify-content: stretch; }
+      .display-mode-control { width: 100%; justify-content: space-between; }
+      .display-mode-label { white-space: nowrap; }
+      .display-mode-button { flex: 1; }
     }
   </style>
 </head>
@@ -92,6 +133,15 @@
     </nav>
   </header>
 
+  <div class="display-mode-bar">
+    <div class="display-mode-control" role="group" aria-label="表示サイズ">
+      <span class="display-mode-label">表示</span>
+      <button class="display-mode-button" type="button" data-display-mode="auto">自動</button>
+      <button class="display-mode-button" type="button" data-display-mode="pc">PC</button>
+      <button class="display-mode-button" type="button" data-display-mode="mobile">スマホ</button>
+    </div>
+  </div>
+
   <main>
     {% block content %}{% endblock %}
   </main>
@@ -102,6 +152,28 @@
       menuButton.addEventListener('click', function() {
         const isOpen = siteNav.classList.toggle('is-open');
         menuButton.setAttribute('aria-expanded', String(isOpen));
+      });
+
+      const displayModeButtons = document.querySelectorAll('[data-display-mode]');
+      const displayModeKey = 'bousai-display-mode';
+      const applyDisplayMode = function(mode) {
+        document.body.classList.remove('display-pc', 'display-mobile');
+        if (mode === 'pc') document.body.classList.add('display-pc');
+        if (mode === 'mobile') document.body.classList.add('display-mobile');
+        displayModeButtons.forEach(function(button) {
+          const selected = button.dataset.displayMode === mode;
+          button.classList.toggle('is-selected', selected);
+          button.setAttribute('aria-pressed', String(selected));
+        });
+      };
+      const savedMode = localStorage.getItem(displayModeKey) || 'auto';
+      applyDisplayMode(['auto', 'pc', 'mobile'].includes(savedMode) ? savedMode : 'auto');
+      displayModeButtons.forEach(function(button) {
+        button.addEventListener('click', function() {
+          const mode = button.dataset.displayMode;
+          localStorage.setItem(displayModeKey, mode);
+          applyDisplayMode(mode);
+        });
       });
     });
   </script>

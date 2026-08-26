@@ -352,8 +352,15 @@ def get_weather_warnings():
 # トップページ：templates/index.html を返す（住民向け指示も表示する）
 @app.route('/')
 def index():
-    resident_notices = [i for i in instructions if i.get('target') == '住民']
-    return render_template('index.html', resident_notices=resident_notices)
+    resident_notices = [
+        i for i in instructions
+        if i.get('target') == '住民' and i.get('status') != '解除'
+    ]
+    return render_template(
+        'index.html',
+        resident_notices=resident_notices,
+        shelters=shelters
+    )
 
 # ログインページ
 @app.route('/login', methods=['GET', 'POST'])
@@ -399,15 +406,39 @@ def logout():
 def shelter_register():
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
+        congestion = request.form.get('congestion', '未登録').strip()
+        remaining_capacity_text = request.form.get('remaining_capacity', '').strip()
+        congestion_options = ('空いています', 'やや混雑', '混雑', '満員')
         if not name:
             return render_template(
                 'shelter_register.html',
                 error=True,
                 message='避難所名を入力してください。'
             )
+        if congestion not in congestion_options:
+            return render_template(
+                'shelter_register.html',
+                error=True,
+                message='混雑状況を選択してください。'
+            )
+        try:
+            remaining_capacity = int(remaining_capacity_text)
+            if remaining_capacity < 0:
+                raise ValueError
+        except ValueError:
+            return render_template(
+                'shelter_register.html',
+                error=True,
+                message='残り許容人数を0以上の整数で入力してください。'
+            )
 
         next_id = max((shelter.get('id', 0) for shelter in shelters), default=0) + 1
-        shelters.append({'id': next_id, 'name': name})
+        shelters.append({
+            'id': next_id,
+            'name': name,
+            'congestion': congestion,
+            'remaining_capacity': remaining_capacity
+        })
         try:
             save_shelters()
         except OSError:
