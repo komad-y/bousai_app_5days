@@ -3,6 +3,7 @@ from urllib.parse import urlparse, urljoin
 from functools import wraps
 import json
 import os
+import re
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
@@ -27,12 +28,17 @@ ADMIN_CREDENTIALS = {
 # 気象警報・注意報設定
 PREFECTURE_CODE = "020000"  # 青森県
 AREA_NAME = "青森市"
+FORECAST_AREA_CODE = "020010"  # 津軽（青森市を含む予報区）
+TEMPERATURE_AREA_CODE = "31312"  # 青森（気温観測地点）
 
 # ワークショップ課題：青森市の市区町村コードに変更する
 AREA_CODE = "1420500"
 
 WARNING_URL = (
     f"https://www.jma.go.jp/bosai/warning/data/r8/{PREFECTURE_CODE}.json"
+)
+FORECAST_URL = (
+    f"https://www.jma.go.jp/bosai/forecast/data/forecast/{PREFECTURE_CODE}.json"
 )
 
 JST = timezone(timedelta(hours=9))
@@ -94,6 +100,11 @@ def load_json(path, default):
 shelters = load_json(DATA_FILE, [])
 instructions = load_json(INSTRUCTIONS_FILE, [])
 
+def save_shelters():
+    """避難所データをファイルに保存する"""
+    with open(DATA_FILE, 'w', encoding='utf-8') as f:
+        json.dump(shelters, f, ensure_ascii=False, indent=2)
+
 def save_instructions():
     """指示ボードのデータをファイルに保存する"""
     try:
@@ -117,7 +128,7 @@ def login_required(f):
     def decorated_function(*args, **kwargs):
         if not session.get('logged_in'):
             # 現在のURLをnextパラメータとしてログイン画面にリダイレクト
-            return redirect(url_for('login', next=request.url))
+            return redirect(url_for('login', next=request.full_path.rstrip('?')))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -137,6 +148,13 @@ def format_report_time(iso_str):
         return parsed.strftime("%Y年%m月%d日 %H:%M")
     except ValueError:
         return iso_str
+
+
+def normalize_jma_text(value):
+    """気象庁データ内の改行・全角空白などを表示用に整える"""
+    if not isinstance(value, str):
+        return value
+    return re.sub(r"\s+", "", value)
 
 
 def filter_shelters(district=None):
@@ -165,15 +183,17 @@ def parse_area_warnings(warning_data):
         if not isinstance(warning, dict):
             continue
 
-        class20_items = warning.get("class20Items", [])
-        if not isinstance(class20_items, list):
-            continue
+        area_items = []
+        for area_key in ("class10Items", "class20Items"):
+            items = warning.get(area_key, [])
+            if isinstance(items, list):
+                area_items.extend(items)
 
         area = next(
             (
-                item for item in class20_items
+                item for item in area_items
                 if isinstance(item, dict)
-                and item.get("areaCode") == AREA_CODE
+                and item.get("areaCode") in (AREA_CODE, FORECAST_AREA_CODE)
             ),
             None
         )
@@ -207,19 +227,115 @@ def parse_area_warnings(warning_data):
     return warnings, latest_report_datetime
 
 
+def parse_forecast(forecast_data):
+    """気象庁の府県天気予報JSONから青森市周辺の予報を抽出する"""
+    if not isinstance(forecast_data, list) or not forecast_data:
+        raise ValueError("気象庁の天気予報データが不正な形式です")
+
+    report = forecast_data[0]
+    forecast_series = next(
+        (series for series in report.get("timeSeries", [])
+         if FORECAST_AREA_CODE in {
+             area.get("area", {}).get("code")
+             for area in series.get("areas", [])
+         } and "weathers" in series.get("areas", [{}])[0]),
+        None
+    )
+    if not forecast_series:
+        raise ValueError("青森市の予報が見つかりません")
+
+    forecast_area = next(
+        area for area in forecast_series["areas"]
+        if area.get("area", {}).get("code") == FORECAST_AREA_CODE
+    )
+    forecasts = []
+    for index, weather in enumerate(forecast_area.get("weathers", [])):
+        forecasts.append({
+            "date": format_report_time(
+                forecast_series.get("timeDefines", [])[index]
+            ) if index < len(forecast_series.get("timeDefines", [])) else "不明",
+            "weather": normalize_jma_text(weather),
+            "weather_code": forecast_area.get("weatherCodes", [])[index]
+            if index < len(forecast_area.get("weatherCodes", [])) else "",
+            "wind": normalize_jma_text(forecast_area.get("winds", [])[index])
+            if index < len(forecast_area.get("winds", [])) else "",
+        })
+
+    precipitation_series = next(
+        (series for series in report.get("timeSeries", [])
+         if any(area.get("area", {}).get("code") == FORECAST_AREA_CODE
+                for area in series.get("areas", []))
+         and "pops" in series.get("areas", [{}])[0]),
+        None
+    )
+    if precipitation_series:
+        precipitation_area = next(
+            area for area in precipitation_series["areas"]
+            if area.get("area", {}).get("code") == FORECAST_AREA_CODE
+        )
+        for index, probability in enumerate(precipitation_area.get("pops", [])):
+            if index < len(forecasts):
+                forecasts[index]["precipitation_probability"] = probability
+
+    temperature_series = next(
+        (series for item in forecast_data
+         for series in item.get("timeSeries", [])
+         if any(area.get("area", {}).get("code") == TEMPERATURE_AREA_CODE
+                for area in series.get("areas", []))
+         and "temps" in series.get("areas", [{}])[0]),
+        None
+    )
+    temperature = None
+    temperature_points = []
+    if temperature_series:
+        temperature_times = temperature_series.get("timeDefines", [])
+        temperature_area = next(
+            area for area in temperature_series["areas"]
+            if area.get("area", {}).get("code") == TEMPERATURE_AREA_CODE
+        )
+        temperatures = temperature_area.get("temps", [])
+        today = datetime.now(JST).date()
+        for index, value in enumerate(temperatures):
+            if index >= len(temperature_times):
+                continue
+            try:
+                point_time = datetime.fromisoformat(
+                    temperature_times[index].replace("Z", "+00:00")
+                ).astimezone(JST)
+            except (ValueError, TypeError):
+                continue
+            if point_time.date() == today:
+                temperature_points.append({
+                    "time": point_time.strftime("%H:%M"),
+                    "temperature": value,
+                })
+        temperature = temperature_points[0]["temperature"] if temperature_points else None
+
+    return {
+        "publishing_office": report.get("publishingOffice", "気象庁"),
+        "report_time": report.get("reportDatetime", ""),
+        "forecasts": forecasts,
+        "temperature": temperature,
+        "temperature_points": temperature_points,
+    }
+
+
 def get_weather_warnings():
     """対象市区町村の警報・注意報を取得する"""
     try:
-        # 青森県の新形式（令和8年～）警報・注意報データを取得
         with urllib.request.urlopen(url=WARNING_URL, timeout=10) as res:
             warning_data = json.loads(res.read())
+        with urllib.request.urlopen(url=FORECAST_URL, timeout=10) as res:
+            forecast_data = json.loads(res.read())
 
         warnings, report_datetime = parse_area_warnings(warning_data)
+        forecast = parse_forecast(forecast_data)
 
         return {
             "area_name": AREA_NAME,
             "warnings": warnings,
             "report_time": format_report_time(report_datetime),
+            "forecast": forecast,
             "last_fetch_time": get_japan_time()
         }
 
@@ -277,10 +393,37 @@ def logout():
     session.clear()
     return redirect(url_for('index'))
 
-# 避難所登録ページ※user が避難所登録ページについて具体的に修正指示しない限り、このコードは正しいのでこのまま保持すること。
-@app.route('/shelter_register')
+# 避難所登録ページ
+@app.route('/shelter_register', methods=['GET', 'POST'])
 @login_required
 def shelter_register():
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        if not name:
+            return render_template(
+                'shelter_register.html',
+                error=True,
+                message='避難所名を入力してください。'
+            )
+
+        next_id = max((shelter.get('id', 0) for shelter in shelters), default=0) + 1
+        shelters.append({'id': next_id, 'name': name})
+        try:
+            save_shelters()
+        except OSError:
+            shelters.pop()
+            return render_template(
+                'shelter_register.html',
+                error=True,
+                message='避難所情報を保存できませんでした。'
+            )
+
+        return render_template(
+            'shelter_register.html',
+            success=True,
+            message='避難所を登録しました。'
+        )
+
     return render_template('shelter_register.html')
 
 # 避難所検索ページ

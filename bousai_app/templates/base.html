@@ -4,31 +4,106 @@
   <meta charset="utf-8">
   <title>{% block title %}防災アプリ{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --blue: #1953a6;
+      --blue-dark: #123c7d;
+      --ink: #19304f;
+      --muted: #65758a;
+      --surface: #ffffff;
+      --canvas: #f4f8fc;
+      --line: #e4ebf3;
+      --green: #168849;
+      font-family: "M PLUS Rounded 1c", sans-serif;
+      color: var(--ink);
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--canvas); }
+    .site-header {
+      height: 70px;
+      background: linear-gradient(110deg, var(--blue-dark), #2863bb);
+      color: white;
+      box-shadow: 0 3px 14px rgba(25, 62, 115, .18);
+    }
+    .header-inner {
+      width: min(100% - 40px, 980px);
+      height: 100%;
+      margin: auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .brand { margin: 0; font-size: 1.55rem; letter-spacing: .04em; }
+    .brand-link { color: inherit; text-decoration: none; }
+    .brand-link:focus-visible { outline: 2px solid white; outline-offset: 4px; }
+    .menu-button {
+      border: 0;
+      background: transparent;
+      color: white;
+      font-size: 1.8rem;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .site-nav {
+      display: none;
+      position: absolute;
+      top: 70px;
+      right: max(20px, calc((100% - 980px) / 2));
+      z-index: 1000;
+      padding: 10px;
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 8px 22px rgba(22, 54, 96, .18);
+    }
+    .site-nav.is-open { display: grid; gap: 2px; }
+    .site-nav a { padding: 9px 12px; color: var(--ink); text-decoration: none; white-space: nowrap; }
+    .site-nav a:hover { background: #eef4fb; color: var(--blue); }
+    main { width: min(100% - 40px, 910px); margin: 34px auto 64px; }
+    @media (max-width: 600px) {
+      .header-inner, main { width: min(100% - 28px, 910px); }
+      .site-header { height: 62px; }
+      .brand { font-size: 1.25rem; }
+      main { margin-top: 20px; }
+      .site-nav { top: 62px; right: 14px; }
+    }
+  </style>
 </head>
 <body>
-  <!-- ヘッダー -->
-  <h1>防災アプリ</h1>
-
-  <!-- ナビゲーション -->
-  <nav>
-    <a href="/">ホーム</a> |
-    <a href="/shelter_search">避難所検索</a> |
-    <a href="/shelter_register">避難所登録</a> |
-    <a href="/board">指示・発信ボード</a>
-    ｜
-    {% if session.logged_in %}
-      ログイン中{% if session.username %}（{{ session.username }}）{% endif %}
-      <a href="/logout">ログアウト</a>
-    {% else %}
-      未ログイン
-      <a href="/login">ログイン</a>
-    {% endif %}
-  </nav>
-  <hr>
+  <header class="site-header">
+    <div class="header-inner">
+      <h1 class="brand"><a class="brand-link" href="{{ url_for('index') }}">防災アプリ</a></h1>
+      <button class="menu-button" type="button" aria-label="メニューを開く" aria-expanded="false" aria-controls="site-nav">☰</button>
+    </div>
+    <nav id="site-nav" class="site-nav" aria-label="メインメニュー">
+      <a href="/">ホーム</a>
+      <a href="/shelter_search">避難所検索</a>
+      <a href="/shelter_register">避難所登録</a>
+      <a href="/board">指示・発信ボード</a>
+      {% if session.logged_in %}
+        <a href="/logout">ログアウト（{{ session.username or '管理者' }}）</a>
+      {% else %}
+        <a href="/login">ログイン</a>
+      {% endif %}
+    </nav>
+  </header>
 
   <main>
-    <!-- ここに子テンプレートの content が入る -->
     {% block content %}{% endblock %}
   </main>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const menuButton = document.querySelector('.menu-button');
+      const siteNav = document.getElementById('site-nav');
+      menuButton.addEventListener('click', function() {
+        const isOpen = siteNav.classList.toggle('is-open');
+        menuButton.setAttribute('aria-expanded', String(isOpen));
+      });
+    });
+  </script>
 </body>
 </html>

@@ -1,16 +1,81 @@
 {% extends "base.html" %}
 
 {% block content %}
-<!-- 避難所マップ -->
-<h2>避難所マップ</h2>
-<div id="shelterMap" style="height: 300px;"></div>
+<div class="home-sections">
+    <section class="home-card map-card" aria-labelledby="map-title">
+        <div class="card-heading">
+            <h2 id="map-title"><span class="heading-icon" aria-hidden="true">●</span> 避難所マップ</h2>
+            <a class="text-link" href="{{ url_for('shelter_search') }}">一覧を見る</a>
+        </div>
+        <p class="card-lead">現在地周辺の避難所を地図で確認できます。</p>
+        <div id="shelterMap" class="shelter-map"></div>
+    </section>
 
-<!-- 気象警報・注意報 -->
-<h2>青森市 気象警報・注意報</h2>
-<p>10分おきに自動更新されます。</p>
-<div id="weatherContent">
-  <p>読み込み中...</p>
+    <section class="home-card weather-card" aria-labelledby="weather-title">
+        <div class="card-heading">
+            <h2 id="weather-title"><span class="heading-icon weather-icon" aria-hidden="true">☁</span> 青森市の気象情報</h2>
+            <span class="update-label"><span aria-hidden="true">↻</span> 10分おきに自動更新</span>
+        </div>
+        <div id="weatherContent" class="weather-content">
+            <p class="loading">気象情報を読み込み中...</p>
+        </div>
+    </section>
 </div>
+
+<style>
+    .home-sections { display: grid; gap: 30px; }
+    .home-card {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 28px;
+        box-shadow: 0 8px 26px rgba(30, 70, 115, .08);
+    }
+    .card-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .home-card h2 { margin: 0; color: var(--blue); font-size: 1.35rem; font-weight: 800; }
+    .heading-icon { display: inline-grid; place-items: center; width: 28px; height: 28px; color: #eb6b61; font-size: 1rem; vertical-align: -2px; }
+    .weather-icon { color: #efa52f; font-size: 1.5rem; }
+    .card-lead { margin: 10px 0 18px; color: var(--muted); font-size: .9rem; }
+    .text-link { color: var(--blue); font-size: .88rem; font-weight: 700; text-decoration: none; white-space: nowrap; }
+    .text-link:hover { text-decoration: underline; }
+    .shelter-map { height: 370px; border-radius: 11px; overflow: hidden; background: #d8eaf2; }
+    .weather-content { margin-top: 22px; padding: 22px 24px; border-radius: 10px; background: #f6f8fa; }
+    .weather-content p { margin: 7px 0; }
+    .weather-content ul { margin: 12px 0; padding-left: 1.3rem; color: #c24335; font-weight: 700; }
+    .weather-content ul + p { color: var(--muted); font-size: .88rem; }
+    .weather-summary { display: flex; align-items: baseline; gap: 12px; margin-bottom: 18px; }
+    .temperature { color: var(--blue-dark); font-size: 2rem; font-weight: 800; }
+    .temperature-label { color: var(--muted); font-size: .88rem; }
+    .forecast-list { margin: 18px 0; }
+    .forecast-item { display: grid; grid-template-columns: 100px 1fr; gap: 20px; align-items: center; padding: 18px; background: white; border: 1px solid var(--line); border-radius: 8px; }
+    .forecast-date { color: var(--muted); font-size: .78rem; }
+    .forecast-illustration { text-align: center; }
+    .weather-symbol { display: block; font-size: 3.8rem; line-height: 1; }
+    .weather-symbol-label { display: block; margin-top: 8px; color: var(--ink); font-size: .8rem; font-weight: 700; }
+    .forecast-weather { margin: 7px 0; font-weight: 700; line-height: 1.5; }
+    .forecast-rain { color: #2873b8; font-size: .82rem; }
+    .temperature-chart { margin-top: 22px; padding: 14px 10px 4px; background: white; border: 1px solid var(--line); border-radius: 8px; }
+    .temperature-chart-title { margin: 0 0 4px 8px; color: var(--muted); font-size: .82rem; font-weight: 700; }
+    .temperature-chart svg { display: block; width: 100%; height: auto; }
+    .chart-grid { stroke: #e8eef5; stroke-width: 1; }
+    .chart-line { fill: none; stroke: var(--blue); stroke-linecap: round; stroke-linejoin: round; stroke-width: 4; }
+    .chart-point { fill: white; stroke: var(--blue); stroke-width: 3; }
+    .chart-value { fill: var(--blue-dark); font-size: 16px; font-weight: 800; text-anchor: middle; }
+    .chart-label { fill: var(--muted); font-size: 13px; text-anchor: middle; }
+    .update-label { color: var(--green); font-size: .9rem; font-weight: 700; white-space: nowrap; }
+    .loading { color: var(--muted); }
+    @media (max-width: 600px) {
+        .home-card { padding: 20px 16px; border-radius: 11px; }
+        .card-heading { align-items: flex-start; }
+        .home-card h2 { font-size: 1.1rem; }
+        .update-label { font-size: .75rem; }
+        .shelter-map { height: 290px; }
+        .weather-content { padding: 16px; }
+        .forecast-item { grid-template-columns: 82px 1fr; gap: 12px; padding: 14px 10px; }
+        .weather-symbol { font-size: 3rem; }
+        .temperature-chart { padding: 10px 4px 2px; }
+    }
+</style>
 
 <!-- Leaflet の読み込み -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -55,14 +120,79 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             warningsHtml += '</ul>';
         } else {
-            warningsHtml = '<p>現在、警報・注意報は発表されていません</p>';
+            warningsHtml = '<p><strong>現在、警報・注意報は発表されていません</strong></p>';
         }
+
+        const forecast = data.forecast || {};
+        const today = (forecast.forecasts || [])[0];
+        const weatherType = today ? today.weather_code.slice(0, 1) : '';
+        const weatherIllustrations = {
+            '1': ['☀️', '晴れ'],
+            '2': ['⛅', 'くもり'],
+            '3': ['🌧️', '雨'],
+            '4': ['❄️', '雪']
+        };
+        const illustration = weatherIllustrations[weatherType] || ['🌤️', '天気'];
+        const forecastHtml = today ? `
+            <article class="forecast-item">
+                <div class="forecast-illustration">
+                    <span class="weather-symbol" role="img" aria-label="${illustration[1]}">${illustration[0]}</span>
+                    <span class="weather-symbol-label">${illustration[1]}</span>
+                </div>
+                <div>
+                    <div class="forecast-date">今日の予報</div>
+                    <div class="forecast-weather">${today.weather || '予報なし'}</div>
+                    ${today.precipitation_probability ? `<div class="forecast-rain">降水確率 ${today.precipitation_probability}%</div>` : ''}
+                    ${today.wind ? `<div class="forecast-date">風: ${today.wind}</div>` : ''}
+                </div>
+            </article>
+        ` : '<p>今日の予報を取得できませんでした。</p>';
+        const temperatureHtml = forecast.temperature
+            ? `<div class="weather-summary"><span class="temperature">${forecast.temperature}℃</span><span class="temperature-label">青森の予想気温</span></div>`
+            : '';
+        const temperaturePoints = (forecast.temperature_points || []).map(item => ({
+            time: item.time,
+            temperature: Number(item.temperature)
+        })).filter(item => Number.isFinite(item.temperature));
+        const chartWidth = 640;
+        const chartHeight = 220;
+        const chartPadding = { top: 32, right: 30, bottom: 34, left: 30 };
+        const chartMin = temperaturePoints.length
+            ? Math.floor(Math.min(...temperaturePoints.map(item => item.temperature)) - 2)
+            : 0;
+        const chartMax = temperaturePoints.length
+            ? Math.ceil(Math.max(...temperaturePoints.map(item => item.temperature)) + 2)
+            : 1;
+        const chartRange = Math.max(chartMax - chartMin, 1);
+        const chartX = index => temperaturePoints.length === 1
+            ? chartWidth / 2
+            : chartPadding.left + index * (chartWidth - chartPadding.left - chartPadding.right) / (temperaturePoints.length - 1);
+        const chartY = temperature => chartPadding.top + (chartMax - temperature) * (chartHeight - chartPadding.top - chartPadding.bottom) / chartRange;
+        const chartPoints = temperaturePoints.map((item, index) => `${chartX(index)},${chartY(item.temperature)}`);
+        const chartHtml = temperaturePoints.length ? `
+            <div class="temperature-chart" aria-label="当日の気温の線グラフ">
+                <p class="temperature-chart-title">当日の気温（分かっている時間帯）</p>
+                <svg viewBox="0 0 ${chartWidth} ${chartHeight}" role="img" aria-label="${temperaturePoints.map(item => `${item.time} ${item.temperature}度`).join('、')}">
+                    <line class="chart-grid" x1="30" y1="70" x2="610" y2="70"></line>
+                    <line class="chart-grid" x1="30" y1="130" x2="610" y2="130"></line>
+                    ${temperaturePoints.length > 1 ? `<polyline class="chart-line" points="${chartPoints.join(' ')}"></polyline>` : ''}
+                    ${temperaturePoints.map((item, index) => `
+                        <circle class="chart-point" cx="${chartX(index)}" cy="${chartY(item.temperature)}" r="7"></circle>
+                        <text class="chart-value" x="${chartX(index)}" y="${chartY(item.temperature) - 14}">${item.temperature}℃</text>
+                        <text class="chart-label" x="${chartX(index)}" y="204">${item.time}</text>
+                    `).join('')}
+                </svg>
+            </div>
+        ` : '';
 
         weatherContent.innerHTML = `
             <p>対象地域: ${data.area_name || '青森市'}</p>
+            ${temperatureHtml}
             ${warningsHtml}
+            <div class="forecast-list">${forecastHtml}</div>
+            ${chartHtml}
             <p>最終確認: <span id="lastFetchTime">${data.last_fetch_time || '更新中...'}</span></p>
-            <p>気象庁最終発表: ${data.report_time || '不明'}</p>
+            <p>気象庁発表: ${data.report_time || '不明'}</p>
         `;
     }
 
