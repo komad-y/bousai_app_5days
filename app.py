@@ -454,6 +454,8 @@ def shelter_register():
         name = request.form.get('name', '').strip()
         congestion = request.form.get('congestion', '未登録').strip()
         remaining_capacity_text = request.form.get('remaining_capacity', '').strip()
+        latitude_text = request.form.get('latitude', '').strip()
+        longitude_text = request.form.get('longitude', '').strip()
         congestion_options = ('空いています', 'やや混雑', '混雑', '満員')
         if not name:
             return render_template(
@@ -477,13 +479,26 @@ def shelter_register():
                 error=True,
                 message='残り許容人数を0以上の整数で入力してください。'
             )
+        try:
+            latitude = float(latitude_text)
+            longitude = float(longitude_text)
+            if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
+                raise ValueError
+        except ValueError:
+            return render_template(
+                'shelter_register.html',
+                error=True,
+                message='緯度・経度を正しい範囲で入力してください。'
+            )
 
         next_id = max((shelter.get('id', 0) for shelter in shelters), default=0) + 1
         shelters.append({
             'id': next_id,
             'name': name,
             'congestion': congestion,
-            'remaining_capacity': remaining_capacity
+            'remaining_capacity': remaining_capacity,
+            'latitude': latitude,
+            'longitude': longitude
         })
         try:
             save_shelters()

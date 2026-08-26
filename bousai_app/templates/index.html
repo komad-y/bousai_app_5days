@@ -59,6 +59,12 @@
             <a class="text-link" href="{{ url_for('shelter_search') }}">一覧を見る</a>
         </div>
         <p class="card-lead">現在地周辺の避難所を地図で確認できます。</p>
+        <button id="locateButton" class="locate-button" type="button">現在地を表示</button>
+        <p id="locationStatus" class="location-status" role="status">現在地を取得すると、避難所までの徒歩時間目安を表示します。</p>
+        <div class="map-legend" aria-label="地図の凡例">
+            <span class="map-legend-item"><span class="map-legend-symbol is-current" aria-hidden="true"></span>現在地</span>
+            <span class="map-legend-item"><span class="map-legend-symbol is-shelter" aria-hidden="true"></span>避難所</span>
+        </div>
         <div id="shelterMap" class="shelter-map"></div>
     </section>
 
@@ -80,7 +86,12 @@
 
 <style>
     .home-sections { display: grid; gap: 30px; }
+    .weather-card { order: 1; }
+    .notice-card { order: 2; }
+    .congestion-card { order: 3; }
+    .map-card { order: 4; }
     .feedback-link { margin: -8px 0 0; text-align: center; }
+    .feedback-link { order: 5; }
     .feedback-subtitle { display: block; margin-top: 6px; color: var(--muted); font-size: .82rem; }
     .home-card {
         background: var(--surface);
@@ -94,6 +105,23 @@
     .heading-icon { display: inline-grid; place-items: center; width: 28px; height: 28px; color: #eb6b61; font-size: 1rem; vertical-align: -2px; }
     .weather-icon { color: #efa52f; font-size: 1.5rem; }
     .card-lead { margin: 10px 0 18px; color: var(--muted); font-size: .9rem; }
+    .locate-button { padding: 9px 14px; border: 0; border-radius: 6px; background: var(--blue); color: white; font: inherit; font-weight: 700; cursor: pointer; }
+    .locate-button:hover { background: var(--blue-dark); }
+    .locate-button:disabled { background: #8b98a8; cursor: wait; }
+    .location-status { margin: 10px 0 14px; color: var(--muted); font-size: .82rem; }
+        .map-legend { display: flex; flex-wrap: wrap; gap: 10px 18px; margin: 0 0 10px; color: var(--ink); font-size: .8rem; font-weight: 700; }
+        .map-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+        .map-legend-symbol { display: inline-block; width: 14px; height: 14px; border: 3px solid white; border-radius: 50%; box-shadow: 0 1px 4px rgba(0, 0, 0, .35); }
+        .map-legend-symbol.is-current { background: #1769d1; }
+        .map-legend-symbol.is-shelter { background: #168849; }
+        .map-marker { display: flex; align-items: center; gap: 5px; width: max-content; padding: 5px 8px 5px 5px; border: 3px solid white; border-radius: 18px; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); color: white; font-size: 12px; font-weight: 800; white-space: nowrap; }
+        .map-marker-icon { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: white; font-size: 13px; }
+        .map-marker.is-current { background: #1769d1; }
+        .map-marker.is-current .map-marker-icon { color: #1769d1; }
+        .map-marker.is-shelter { background: #168849; }
+        .map-marker.is-shelter .map-marker-icon { color: #168849; }
+        .map-marker.is-current { animation: marker-pulse 1.8s ease-in-out infinite; }
+        @keyframes marker-pulse { 50% { box-shadow: 0 2px 8px rgba(0, 0, 0, .35), 0 0 0 7px rgba(23, 105, 209, .22); } }
     .text-link { color: var(--blue); font-size: .88rem; font-weight: 700; text-decoration: none; white-space: nowrap; }
     .text-link:hover { text-decoration: underline; }
     .notice-icon { color: #d94d3f; font-weight: 800; }
@@ -121,7 +149,10 @@
     .shelter-map { height: 370px; border-radius: 11px; overflow: hidden; background: #d8eaf2; }
     .weather-content { margin-top: 22px; padding: 22px 24px; border-radius: 10px; background: #f6f8fa; }
     .weather-content p { margin: 7px 0; }
-    .weather-content ul { margin: 12px 0; padding-left: 1.3rem; color: #c24335; font-weight: 700; }
+    .weather-content ul { display: grid; gap: 8px; margin: 12px 0; padding: 0; list-style: none; font-weight: 700; }
+    .weather-warning { padding: 10px 12px; border-left: 4px solid; border-radius: 5px; }
+    .weather-warning.is-advisory { border-left-color: #d79a00; background: #fff4c7; color: #795700; }
+    .weather-warning.is-warning { border-left-color: #d43c30; background: #ffe3df; color: #a52820; }
     .weather-content ul + p { color: var(--muted); font-size: .88rem; }
     .weather-summary { display: flex; align-items: baseline; gap: 12px; margin-bottom: 18px; }
     .temperature { color: var(--blue-dark); font-size: 2rem; font-weight: 800; }
@@ -159,13 +190,119 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // 地図の初期化（青森県青森市周辺を中心に設定）
+    const shelterData = {{ shelters|tojson }};
     const map = L.map('shelterMap').setView([40.8222, 140.7474], 12);
 
     // OpenStreetMapタイルを追加
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors'
     }).addTo(map);
+
+    const locateButton = document.getElementById('locateButton');
+    const locationStatus = document.getElementById('locationStatus');
+    const shelterLayers = [];
+    let currentLocationMarker;
+    let currentLocation;
+
+    function escapeHtml(value) {
+        return String(value).replace(/[&<>'"]/g, function(character) {
+            return {'&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'}[character];
+        });
+    }
+
+    function distanceInMeters(first, second) {
+        const earthRadius = 6371000;
+        const latitudeDifference = (second[0] - first[0]) * Math.PI / 180;
+        const longitudeDifference = (second[1] - first[1]) * Math.PI / 180;
+        const firstLatitude = first[0] * Math.PI / 180;
+        const secondLatitude = second[0] * Math.PI / 180;
+        const haversine = Math.sin(latitudeDifference / 2) ** 2
+            + Math.cos(firstLatitude) * Math.cos(secondLatitude)
+            * Math.sin(longitudeDifference / 2) ** 2;
+        return earthRadius * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+    }
+
+    function walkingTimeLabel(distance) {
+        const minutes = Math.max(1, Math.ceil(distance / 80));
+        return `徒歩約${minutes}分（直線距離からの目安）`;
+    }
+
+    function createMapIcon(type, label, symbol) {
+        return L.divIcon({
+            className: '',
+            html: `<span class="map-marker ${type}"><span class="map-marker-icon" aria-hidden="true">${symbol}</span>${label}</span>`,
+            iconSize: null,
+            iconAnchor: [12, 20],
+            popupAnchor: [0, -20]
+        });
+    }
+
+    shelterData.forEach(function(shelter) {
+        const latitude = Number(shelter.latitude);
+        const longitude = Number(shelter.longitude);
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+
+        const marker = L.marker([latitude, longitude], {
+            icon: createMapIcon('is-shelter', '避難所', '●'),
+            title: shelter.name,
+            alt: `${shelter.name} 避難所`
+        }).addTo(map);
+        marker.bindPopup(`<strong>${escapeHtml(shelter.name)}</strong><br>徒歩時間を計算中...`);
+        shelterLayers.push({ marker: marker, position: [latitude, longitude], name: shelter.name });
+    });
+
+    if (shelterLayers.length > 0) {
+        map.fitBounds(L.featureGroup(shelterLayers.map(function(item) { return item.marker; })).getBounds(), { padding: [24, 24] });
+    } else {
+        locationStatus.textContent = '座標が登録された避難所はありません。避難所登録時に位置情報を入力してください。';
+    }
+
+    function updateWalkingTimes() {
+        shelterLayers.forEach(function(item) {
+            const distance = distanceInMeters(currentLocation, item.position);
+            item.marker.setPopupContent(`<strong>${escapeHtml(item.name)}</strong><br>${walkingTimeLabel(distance)}`);
+        });
+    }
+
+    function showCurrentLocation(position) {
+        locateButton.disabled = false;
+        currentLocation = [position.coords.latitude, position.coords.longitude];
+        if (currentLocationMarker) map.removeLayer(currentLocationMarker);
+        currentLocationMarker = L.marker(currentLocation, {
+            icon: createMapIcon('is-current', '現在地', '●'),
+            title: '現在地',
+            alt: '現在地'
+        }).addTo(map).bindPopup('<strong>現在地</strong>');
+        updateWalkingTimes();
+        locationStatus.textContent = '現在地を表示中。各避難所のマーカーを押すと徒歩時間目安を確認できます。';
+        const points = shelterLayers.map(function(item) { return item.position; });
+        points.push(currentLocation);
+        map.fitBounds(L.latLngBounds(points), { padding: [24, 24], maxZoom: 15 });
+    }
+
+    function showLocationError(error) {
+        locateButton.disabled = false;
+        const messages = {
+            1: '位置情報の利用が許可されていません。',
+            2: '現在地を取得できませんでした。',
+            3: '現在地の取得がタイムアウトしました。'
+        };
+        locationStatus.textContent = messages[error.code] || '現在地を取得できませんでした。';
+    }
+
+    locateButton.addEventListener('click', function() {
+        if (!navigator.geolocation) {
+            locationStatus.textContent = 'このブラウザでは位置情報を利用できません。';
+            return;
+        }
+        locateButton.disabled = true;
+        locationStatus.textContent = '現在地を取得しています...';
+        navigator.geolocation.getCurrentPosition(showCurrentLocation, showLocationError, {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 300000
+        });
+    });
 
     // 気象警報・注意報の自動更新機能
     function updateWeatherWarnings() {
@@ -192,7 +329,10 @@ document.addEventListener('DOMContentLoaded', function() {
         if (data.warnings && data.warnings.length > 0) {
             warningsHtml = '<ul>';
             data.warnings.forEach(warning => {
-                warningsHtml += `<li>${warning.name}（${warning.status}）</li>`;
+                const warningClass = warning.name.includes('注意報')
+                    ? 'is-advisory'
+                    : 'is-warning';
+                warningsHtml += `<li class="weather-warning ${warningClass}">${warning.name}（${warning.status}）</li>`;
             });
             warningsHtml += '</ul>';
         } else {
