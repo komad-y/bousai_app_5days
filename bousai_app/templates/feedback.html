@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}意見箱 - 防災アプリ{% endblock %}
+
+{% block content %}
+<section class="feedback-page" aria-labelledby="feedback-title">
+    <h2 id="feedback-title">意見箱</h2>
+    <p class="feedback-lead">災害情報に関するご意見をお聞かせください。</p>
+
+    {% if success %}
+        <p class="feedback-message is-success" role="status">{{ message }}</p>
+    {% endif %}
+
+    {% if error %}
+        <p class="feedback-message is-error" role="alert">{{ message }}</p>
+    {% endif %}
+
+    <form method="post" class="feedback-form">
+        <label for="opinion">ご意見</label>
+        <textarea id="opinion" name="opinion" rows="8" maxlength="2000" required placeholder="ご意見を入力してください"></textarea>
+        <button type="submit">送信する</button>
+    </form>
+
+    <section class="feedback-list" aria-labelledby="feedback-list-title">
+        <h3 id="feedback-list-title">寄せられたご意見</h3>
+        {% if feedbacks %}
+            <div class="feedback-items">
+                {% for feedback in feedbacks %}
+                    <article class="feedback-item">
+                        <time datetime="{{ feedback.created_at }}">{{ feedback.created_at }}</time>
+                        <p>{{ feedback.opinion }}</p>
+                    </article>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="feedback-empty">まだご意見はありません。</p>
+        {% endif %}
+    </section>
+
+    <a class="home-button" href="{{ url_for('index') }}">ホームに戻る</a>
+</section>
+
+<style>
+    .feedback-page {
+        max-width: 680px;
+        margin: 0 auto;
+        padding: 30px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        box-shadow: 0 8px 26px rgba(30, 70, 115, .08);
+    }
+    .feedback-page h2 { margin: 0; color: var(--blue); font-size: 1.5rem; }
+    .feedback-lead { margin: 10px 0 24px; color: var(--muted); }
+    .feedback-form { display: grid; gap: 10px; }
+    .feedback-form label { font-weight: 700; }
+    .feedback-form textarea {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        color: var(--ink);
+        font: inherit;
+        resize: vertical;
+    }
+    .feedback-form textarea:focus { outline: 2px solid #8bb5ec; outline-offset: 1px; }
+    .feedback-form button {
+        justify-self: start;
+        margin-top: 4px;
+        padding: 10px 24px;
+        border: 0;
+        border-radius: 6px;
+        background: var(--blue);
+        color: white;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+    }
+    .feedback-form button:hover { background: var(--blue-dark); }
+    .feedback-message { margin: 0 0 20px; padding: 12px 14px; border-radius: 7px; font-weight: 700; }
+    .feedback-message.is-success { background: #e5f5eb; color: #146c3d; }
+    .feedback-message.is-error { background: #fff0ee; color: #b83b31; }
+    .feedback-list { margin-top: 34px; padding-top: 26px; border-top: 1px solid var(--line); }
+    .feedback-list h3 { margin: 0 0 14px; color: var(--blue); font-size: 1.2rem; }
+    .feedback-items { display: grid; gap: 12px; }
+    .feedback-item { padding: 14px 16px; background: #f7faff; border: 1px solid var(--line); border-radius: 8px; }
+    .feedback-item time { color: var(--muted); font-size: .82rem; }
+    .feedback-item p { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .feedback-empty { margin: 0; color: var(--muted); }
+    .home-button { display: inline-block; margin-top: 28px; color: var(--blue); font-weight: 700; text-decoration: none; }
+    .home-button:hover { text-decoration: underline; }
+    @media (max-width: 600px) {
+        .feedback-page { padding: 22px 16px; border-radius: 11px; }
+    }
+</style>
+{% endblock %}

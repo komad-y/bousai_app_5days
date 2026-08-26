@@ -88,6 +88,7 @@ WARNING_CODES = {
 # サンプルデータの読み込み
 DATA_FILE = os.path.join(APP_DIR, 'data', 'shelters.json')
 INSTRUCTIONS_FILE = os.path.join(APP_DIR, 'data', 'instructions.json')
+FEEDBACK_FILE = os.path.join(APP_DIR, 'data', 'feedbacks.json')
 
 def load_json(path, default):
     """JSONファイルを読み込む（存在しない・壊れている場合は default を返す）"""
@@ -99,6 +100,7 @@ def load_json(path, default):
 
 shelters = load_json(DATA_FILE, [])
 instructions = load_json(INSTRUCTIONS_FILE, [])
+feedbacks = load_json(FEEDBACK_FILE, [])
 
 def save_shelters():
     """避難所データをファイルに保存する"""
@@ -112,6 +114,11 @@ def save_instructions():
             json.dump(instructions, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
+
+def save_feedbacks():
+    """意見箱の投稿をファイルに保存する"""
+    with open(FEEDBACK_FILE, 'w', encoding='utf-8') as f:
+        json.dump(feedbacks, f, ensure_ascii=False, indent=2)
 # ────────────────────────────────
 
 # ────────────────────────────────
@@ -361,6 +368,45 @@ def index():
         resident_notices=resident_notices,
         shelters=shelters
     )
+
+# 意見箱ページ
+@app.route('/feedback', methods=['GET', 'POST'])
+def feedback():
+    displayed_feedbacks = list(reversed(feedbacks))
+
+    if request.method == 'POST':
+        opinion = request.form.get('opinion', '').strip()
+        if not opinion:
+            return render_template(
+                'feedback.html',
+                error=True,
+                message='意見を入力してください。',
+                feedbacks=displayed_feedbacks
+            )
+
+        feedbacks.append({
+            'opinion': opinion,
+            'created_at': get_japan_time()
+        })
+        try:
+            save_feedbacks()
+        except OSError:
+            feedbacks.pop()
+            return render_template(
+                'feedback.html',
+                error=True,
+                message='意見を送信できませんでした。',
+                feedbacks=displayed_feedbacks
+            )
+
+        return render_template(
+            'feedback.html',
+            success=True,
+            message='ご意見を送信しました。ありがとうございます。',
+            feedbacks=list(reversed(feedbacks))
+        )
+
+    return render_template('feedback.html', feedbacks=displayed_feedbacks)
 
 # ログインページ
 @app.route('/login', methods=['GET', 'POST'])
